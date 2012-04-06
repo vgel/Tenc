@@ -89,15 +89,15 @@ Detailed syntax breakdown:
 
 := defines a rule
 
-[foo bar] is a set of foo and bar, applies to ??, * or + qualifiers (need all in set)
+[foo bar] is a set of foo and bar, applies to ??, \* or + qualifiers (need all in set)
 
 | is OR
 
 ?? is one or none
 
-* is 0 or more
+\* is 0 or more
 
-+ is 1 or more
+\+ is 1 or more
 
 a name can be a literal string ("chars") or a regular expression or a reference to another rule
 
