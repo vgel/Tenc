@@ -1,4 +1,4 @@
-0x10^c C (or 10C for short): a high-level language for the DCPU-16 computer
+0x10^c C (or tenc for short): a high-level language for the DCPU-16 computer
 ===========================================================================
 
 Huh?
