@@ -21,6 +21,7 @@ This code below:
     	return a(1) + i;
     }
     
+    // This is a comment
     int a(int a) {
     	return a * 4;
     }
