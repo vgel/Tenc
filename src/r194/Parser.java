@@ -114,10 +114,71 @@ public class Parser {
 		return false;
 	}
 	
+	public boolean ifStatement(AbstractSyntaxNode parent){
+		if (accept(Token.IF)){
+			AbstractSyntaxNode node = parent.addChild(ASTType.IF, null);
+			expect(Token.OPEN_PAREN);
+			expect(condition(node), "condition for If statement");
+			expect(Token.CLOSE_PAREN);
+			expect(block(node), "Block for if statement");
+			return true;
+		}
+		return false;
+	}
+	
+	public boolean whileLoop(AbstractSyntaxNode parent){
+		if (accept(Token.WHILE)){
+			AbstractSyntaxNode node = parent.addChild(ASTType.WHILE, null);
+			expect(Token.OPEN_PAREN);
+			expect(condition(node), "condition for while loop");
+			expect(Token.CLOSE_PAREN);
+			expect(block(node), "Block for while loop");
+			return true;
+		}
+		return false;
+	}
+	
+	public boolean condition(AbstractSyntaxNode parent){
+		AbstractSyntaxNode node = new AbstractSyntaxNode(ASTType.CONDITION, null, parent);
+		if (conditionTerm(node)){
+			parent.addChild(node);
+			while (accept(Token.OR)){
+				node.addChild(ASTType.OP, lookahead(-1));
+				expect(conditionTerm(node), "condition term on other side of condition operator");
+			}
+			return true;
+		}
+		return false;
+	}
+	
+	public boolean conditionTerm(AbstractSyntaxNode parent) {
+		AbstractSyntaxNode node = new AbstractSyntaxNode(ASTType.CONDITIONTERM, null, null);
+		if (conditionFactor(node)){
+			parent.addChild(node);
+			while (accept(Token.AND)){
+				node.addChild(ASTType.OP, lookahead(-1));
+				expect(conditionFactor(node), "condition factor on other side of condition operator");
+			}
+			return true;
+		}
+		return false;
+	}
+	
+	public boolean conditionFactor(AbstractSyntaxNode node){
+		AbstractSyntaxNode fac = new AbstractSyntaxNode(ASTType.CONDITIONFACTOR, null, null);
+		if (expression(fac) && (accept(Token.GREATER) || accept(Token.GREATEREQ) || accept(Token.LESSTHAN) || accept(Token.LESSEQ))){
+			node.addChild(fac);
+			fac.addChild(ASTType.OP, lookahead(-1));
+			expect(expression(fac), "second expression in condition");
+			return true;
+		}
+		return false;
+	}
+	
 	public boolean block(AbstractSyntaxNode parent) {
 		if (accept(Token.OPEN_BRACK)){
 			AbstractSyntaxNode node = parent.addChild(ASTType.BLOCK, null);
-			while (statement(node)){}
+			while (statement(node) || ifStatement(node) || whileLoop(node)){}
 			expect(Token.CLOSE_BRACK);
 			return true;
 		}
@@ -147,6 +208,12 @@ public class Parser {
 			accept(Token.ASSIGN);
 			AbstractSyntaxNode node = parent.addChild(ASTType.ASSIGN, lookahead(-2).matched);
 			expression(node);
+			return true;
+		}
+		AbstractSyntaxNode mset = new AbstractSyntaxNode(ASTType.MEMSET, null, parent);
+		if (accept(Token.OPEN_SQUARE) && expression(mset) && accept(Token.CLOSE_SQUARE) && accept(Token.ASSIGN)){
+			parent.addChild(mset);
+			expect(expression(mset), "expr");
 			return true;
 		}
 		return false;
@@ -194,8 +261,23 @@ public class Parser {
 	
 	//number|ident|functionCall|"("expression")"
 	public boolean factor(AbstractSyntaxNode parent) {
-		if (accept(Token.NUMBER)){
+		if (accept(Token.HEXNUMBER)){
+			String s = lookahead(-1).matched;
+			Integer i;
+			if (s.endsWith("0x")){
+				i = new Integer(0);
+			}
+			else {
+				i = Integer.parseInt(s.split("0x")[1], 16);
+			}
+			parent.addChild(ASTType.NUMBER, i.toString());
+		}
+		else if (accept(Token.NUMBER)){
 			parent.addChild(ASTType.NUMBER, lookahead(-1).matched);
+		}
+		else if (accept(Token.LITCHAR)){
+			int i = (int)(lookahead(-1).matched.charAt(1));
+			parent.addChild(ASTType.NUMBER, Integer.valueOf(i).toString());
 		}
 		else if (functionCall(parent)){}
 		else if (accept(Token.IDENT)){
@@ -204,6 +286,11 @@ public class Parser {
 		else if (accept(Token.OPEN_PAREN)){
 			expect(expression(parent), "expr");
 			expect(Token.CLOSE_PAREN);
+		}
+		else if (accept(Token.OPEN_SQUARE)){
+			AbstractSyntaxNode add = parent.addChild(ASTType.MEMGET, null);
+			expect(expression(add), "address");
+			expect(Token.CLOSE_SQUARE);
 		}
 		else {
 			return false;
@@ -233,7 +320,28 @@ public class Parser {
 	}
 	
 	enum ASTType {
-		PROGRAM, FUNCTIONDEC, TYPELIST, TYPE, BLOCK, ASSIGN, CREATE, RET, EXPR, TERM, NUMBER, IDENT, FUNCTIONCALL, FUNCARGS, OP;
+		PROGRAM,
+		FUNCTIONDEC,
+		IF,
+		WHILE,
+		TYPELIST,
+		TYPE,
+		BLOCK,
+		ASSIGN,
+		MEMSET,
+		MEMGET,
+		CREATE,
+		RET,
+		EXPR,
+		TERM,
+		NUMBER,
+		IDENT,
+		FUNCTIONCALL,
+		FUNCARGS,
+		OP,
+		CONDITION,
+		CONDITIONTERM,
+		CONDITIONFACTOR;
 	}
 	
 	public static class AbstractSyntaxNode {

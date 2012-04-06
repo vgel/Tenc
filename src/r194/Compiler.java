@@ -22,6 +22,7 @@ public class Compiler {
 			System.err.println("USAGE: java -jar compiler.jar filename outputname");
 			System.exit(1);
 		}
+		System.out.println("Compiling");
 		File input = new File(args[0]);
 		File output = new File(args[1]);
 		
@@ -41,12 +42,15 @@ public class Compiler {
 			System.err.println("Could not read input file!");
 		}
 		
+		System.out.println("Lexing");
 		List<Lexer.Lexeme> lexed = new Lexer().lex(code);
+		System.out.println("Compiling");
 		Parser p = new Parser(lexed);
 		p.filterTokens();
 		System.out.println(p.tokens);
 		AbstractSyntaxNode program = p.program();
 		System.out.println(program);
+		System.out.println("Generating");
 		GenerateAsm asm = new GenerateAsm();
 		List<String> gen = asm.generate(program);
 		

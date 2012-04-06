@@ -2,15 +2,22 @@ package r194;
 
 import java.util.*;
 
-import r194.CodeGen.PrimType;
 import r194.Parser.*;
 
 public class GenerateAsm {
 	static final String functionMangle = "func_%s";
+	enum PrimType { VOID, INT };
+	
 	
 	static void error(String s) {
 		System.err.println(s);
 		System.exit(1);
+	}
+	
+	static int uuid = 0;
+	static String getUniqueLabel(String prefix){
+		uuid++;
+		return prefix + "_gen_label_" + uuid;
 	}
 	
 	static PrimType getPrimType(String s){
@@ -25,12 +32,11 @@ public class GenerateAsm {
 	public List<String> generate(AbstractSyntaxNode program){
 		List<String> assembly = new ArrayList<>();
 		List<AbstractSyntaxNode> funcs = program.children;
-		
 		//add "prologue"
 		assembly.add("SET PUSH, exit");
 		assembly.add("SET PUSH, exit"); //lol, I don't know. It works...
 		assembly.add("SET PC, func_main");
-		assembly.add(":exit SET PC, exit");
+		assembly.add(":exit SUB PC, 1");
 		
 		Map<String, Type> functions = new HashMap<>();
 		for (AbstractSyntaxNode node : funcs){
@@ -110,6 +116,8 @@ public class GenerateAsm {
 		public static Statement getFor(AbstractSyntaxNode node, String func, Map<String, Type> functions, Map<String, Integer> offsets){
 			if (node.type == ASTType.ASSIGN || node.type == ASTType.CREATE){
 				return new Assignment(node, functions, offsets);
+			} else if (node.type == ASTType.MEMSET){
+				return new Memset(node, functions, offsets);
 			} else if (node.type == ASTType.EXPR){
 				return new Expression(node, Factor.regToUse, functions, offsets);
 			} else if (node.type == ASTType.RET){
@@ -149,6 +157,179 @@ public class GenerateAsm {
 			assembly.add("SET I, SP");
 			if (offset != 0) assembly.add("ADD I, " + offset);
 			assembly.add("SET [I], " + regToUse);
+		}
+	}
+	
+	public static class Memset extends Statement {
+		static final String regToUse = "X";
+		Expression address;
+		Expression setTo;
+		Map<String, Integer> offsets;
+		
+		public Memset(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets) {
+			this.offsets = offsets;
+			address = new Expression(node.children.get(0), "J", functions, offsets);
+			setTo = new Expression(node.children.get(1), regToUse, functions, offsets);
+		}
+		
+		@Override
+		public void fillInCode(List<String> assembly) {
+			setTo.fillInCode(assembly);
+			address.fillInCode(assembly);
+			assembly.add("SET [J], " + regToUse);
+		}
+	}
+	
+	public static class Condition implements FillIn {
+		List<AbstractSyntaxNode> nodes;
+		Map<String, Type> functions;
+		Map<String, Integer> offsets;
+		String instruction;
+		
+		//a class that takes one instruction to execute if the condition is true. This instruction should generally be a jump :)
+		public Condition(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets, String instruction){
+			
+		}
+		
+		@Override
+		public void fillInCode(List<String> assembly) {
+			if (nodes.size() == 1){
+				Expression e = new Expression(nodes.get(0), "X", functions, offsets);
+				e.fillInCode(assembly);
+				assembly.add("SET J, 0");
+				assembly.add("IFN X, J");
+				assembly.add(instruction);
+			}
+			else {
+				boolean first = true;
+				for (int i = 0; i < nodes.size(); i++){
+					AbstractSyntaxNode node = nodes.get(i);
+					if (node.type == ASTType.OP){
+						if (i == 0 || i == nodes.size() - 1) {
+							error("Unexpected operator!");
+							return;
+						}
+						if (first){
+							String op = null;
+							if (node.content.equals("+")) op = "ADD";
+							else if (node.content.equals("-")) op = "SUB";
+							else error("Unknown expr op " + node.content);
+							Term a = new Term(nodes.get(i - 1), functions, offsets);
+							Term b = new Term(nodes.get(i + 1), functions, offsets);
+							a.fillInCode(assembly);
+							assembly.add("SET " + regToUse + ", " + Term.regToUse);
+							b.fillInCode(assembly);
+							assembly.add(op + " " + regToUse + ", " + Term.regToUse);
+							first = false;
+						}
+						else {
+							String op = null;
+							if (node.content.equals("+")) op = "ADD";
+							else if (node.content.equals("-")) op = "SUB";
+							else error("Unknown expr op " + node.content);
+							Term a = new Term(nodes.get(i + 1), functions, offsets);
+							a.fillInCode(assembly);
+							assembly.add(op + " " + regToUse + ", " + Term.regToUse);
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	public static class ConditionTerm  implements FillIn {
+		Map<String, Type> functions;
+		Map<String, Integer> offsets;
+		List<AbstractSyntaxNode> nodes;
+		String instruction;
+		
+		@Override
+		public void fillInCode(List<String> assembly) {
+			if (nodes.size() == 1){
+				ConditionFactor fac = new ConditionFactor(nodes.get(0), functions, offsets, instruction);
+			}
+			else {
+				boolean first = true;
+				String falseLabel = getUniqueLabel("and-chain-false");
+				for (int i = 0; i < nodes.size(); i++){
+					if (nodes.get(i).type == ASTType.OP){
+						if (i == 0 || i == nodes.size() - 1){
+							error("Unexpected &&");
+						}
+						if (!nodes.get(i).content.equals("&&")){
+							error("Unexpected op " + nodes.get(i).content);
+						}
+						
+						if (first){
+							String aTrueLabel = getUniqueLabel("a-true");
+							ConditionFactor a = new ConditionFactor(nodes.get(i - 1), functions, offsets, "SET PC, " + aTrueLabel);
+							String bTrueLabel = getUniqueLabel("b-true");
+							ConditionFactor b = new ConditionFactor(nodes.get(i + 1), functions, offsets, "SET PC, " + bTrueLabel);
+							a.fillInCode(assembly);
+							assembly.add("SET PC, " + falseLabel);
+							assembly.add(":" + aTrueLabel);
+							b.fillInCode(assembly);
+							assembly.add("SET PC, " + falseLabel);
+							first = false;
+						}
+						else {
+							
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	public static class ConditionFactor implements FillIn {
+		String regToUse = "B";
+		Expression e1; //to J
+		Expression e2; //to regToUse
+		String op;
+		String instruction;
+		
+		public ConditionFactor(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets, String instruction) {
+			e1 = new Expression(node.children.get(0), "J", functions, offsets);
+			e2 = new Expression(node.children.get(2), regToUse, functions, offsets);
+			this.op = (String)node.children.get(1).content;
+			this.instruction = instruction;
+		}
+
+		@Override
+		public void fillInCode(List<String> assembly) {
+			e1.fillInCode(assembly);
+			e2.fillInCode(assembly);
+			
+			if (op.equals(">")){
+				assembly.add("IFG J, " + regToUse);
+				assembly.add(instruction);
+			}
+			else if (op.equals(">=")){
+				assembly.add("IFG J, " + regToUse);
+				assembly.add(instruction);
+				assembly.add("IFE J, " + regToUse);
+				assembly.add(instruction);
+			}
+			else if (op.equals("<")){
+				String falsy = getUniqueLabel("lessfalse");
+				assembly.add("IFG J, " + regToUse);
+				assembly.add("SET PC, " + falsy);
+				assembly.add("IFE J, " + regToUse);
+				assembly.add("SET PC, " + falsy);
+				assembly.add(instruction);
+				assembly.add(":" + falsy);
+			}
+			else if (op.equals("<=")){
+				String falsy = getUniqueLabel("lesseqfalse");
+				assembly.add("IFG J, " + regToUse);
+				assembly.add("SET PC, " + falsy);
+				assembly.add(instruction);
+				assembly.add(":" + falsy);
+			}
+			else if (op.equals("==")){
+				assembly.add("IFE J, " + regToUse);
+				assembly.add(instruction);
+			}
 		}
 	}
 	
@@ -308,8 +489,24 @@ public class GenerateAsm {
 				return new Identifier(node, offsets);
 			} else if (node.type == ASTType.EXPR){
 				return new SubExpr(node, functions, offsets);
+			} else if (node.type == ASTType.MEMGET){
+				return new Memget(node, functions, offsets);
 			} else error("Unknown factor type " + node.type);
 			return null;
+		}
+	}
+	
+	public static class Memget extends Factor implements FillIn {
+		Expression expr;
+		
+		public Memget(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets) {
+			expr = new Expression(node.children.get(0), "J", functions, offsets);
+		}
+		
+		@Override
+		public void fillInCode(List<String> assembly) {
+			expr.fillInCode(assembly);
+			assembly.add("SET "  + regToUse + ", [J]");
 		}
 	}
 	
