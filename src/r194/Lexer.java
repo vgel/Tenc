@@ -7,7 +7,9 @@ public class Lexer {
 	enum Token {
 		NONE(null),
 		EOF(null),
-		//COMMENT("\\/\\/.*?\n"),
+		COMMENT("//[^\n]*"),
+		OPEN_MULTILINE_COMMENT("/\\*"),
+		CLOSE_MULTILINE_COMMENT("\\*/"),
 		RETURN("return"),
 		WHITESPACE("\\p{Space}"),
 		TYPE_NAME("(int|void)"),
@@ -75,14 +77,33 @@ public class Lexer {
 		List<Lexeme> ret = new ArrayList<>();
 		int start = 0;
 		int end = 0;
+		boolean commentState = false;
 		
 		while (end < input.length()){
 			if (!isMatchable(input.substring(start, end + 1))){
 				String token = input.substring(start, end);
-				if (isMatchable(token)){
+				if (isMatchable(token) || commentState){
 					Token type = Token.getMatching(token);
-					ret.add(new Lexeme(token, type));
+					
+					// Checks for open multi-line comment
+					if (type == Token.OPEN_MULTILINE_COMMENT) {
+						commentState = true;
+					}
+					
+					if (!(commentState || type == Token.COMMENT)) {
+						ret.add(new Lexeme(token, type));
+					}
+					
+					// Checks for end of multi-line comment
+					if (commentState) {
+						commentState = type != Token.CLOSE_MULTILINE_COMMENT;
+					}
+					
 					start = end;
+					
+					if (commentState) {
+						end++;
+					}
 				}
 				else {
 					end++;
