@@ -1,0 +1,8 @@
+int main(){
+	int i = 1;
+	return a(1) + i;
+}
+
+int a(int a) {
+	return a * 4;
+}
