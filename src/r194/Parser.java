@@ -17,7 +17,7 @@ public class Parser {
 		List<Lexeme> newTokens = new ArrayList<>();
 		for (int i = 0; i < tokens.size(); i++) {
 			Lexeme t = tokens.get(i);
-			if (/*t.type != Token.COMMENT && */t.type != Token.WHITESPACE){
+			if (t.type != Token.WHITESPACE){
 				newTokens.add(t);
 			}
 		}

@@ -22,7 +22,15 @@ ADD I, 0
 SET Z, [I]
 SET Y, Z
 SET X, Y
+SET PUSH, 0
+SET I, SP
 SET Z, 1
+SET Y, Z
+SET Z, Y
+SET PUSH, Z
+SET [I], PC
+ADD [I], 3
+SET PC, func_a
 SET Y, Z
 ADD X, Y
 SET I, SP
@@ -55,6 +63,16 @@ ADD J, Y
 SET [J], X
 SET Z, 0
 SET Y, Z
+SET A, Y
+ADD SP, 1
+SET PC, POP
+:func_a
+SET I, SP
+ADD I, 0
+SET Z, [I]
+SET Y, Z
+SET Z, 4
+MUL Y, Z
 SET A, Y
 ADD SP, 1
 SET PC, POP
