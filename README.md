@@ -77,7 +77,11 @@ Currently there are many useless register swaps. For example, the Z -> Y -> X sw
 
 2. Does not support the video-memory extensions in some emulators
 
-Pointer syntax is coming soon, which will fix this.
+Pointer syntax is coming soon, which will fix this. It will probably look something like `int i = 10; i ~ 5;` to set address 10 to 5.
+
+3. No conditions. At all :(
+
+No if, no loop, no while. This will be coming very soon! I just wanted to get an initial version out.
 
 Detailed syntax breakdown:
 --------------------------
