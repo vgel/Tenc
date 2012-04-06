@@ -23,7 +23,7 @@ This code below:
     
     // This is a comment
     int a(int a) {
-    	return a * 4;
+    	return a * 4; /* Look, ma, no local variables! */
     }
 
 compiles to this assembly:
