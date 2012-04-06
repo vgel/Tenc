@@ -1,4 +1,5 @@
 bin/
 emu/
+src/r194/CodeGen.java
 .*
 !.gitignore
