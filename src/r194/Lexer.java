@@ -7,7 +7,7 @@ public class Lexer {
 	enum Token {
 		NONE(null),
 		EOF(null),
-		//COMMENT("\\/\\/.*?\n"),
+		COMMENT("//[^\n]*"),
 		RETURN("return"),
 		WHITESPACE("\\p{Space}"),
 		TYPE_NAME("(int|void)"),
