@@ -125,4 +125,4 @@ a name can be a literal string ("chars") or a regular expression or a reference 
     
     number := [0-9]+
     
-    call := ident "(" expr* ")"
+    call := ident "(" expr ["," expr]* ")"

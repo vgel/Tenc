@@ -166,7 +166,7 @@ public class Parser {
 	
 	public boolean conditionFactor(AbstractSyntaxNode node){
 		AbstractSyntaxNode fac = new AbstractSyntaxNode(ASTType.CONDITIONFACTOR, null, null);
-		if (expression(fac) && (accept(Token.GREATER) || accept(Token.GREATEREQ) || accept(Token.LESSTHAN) || accept(Token.LESSEQ))){
+		if (expression(fac) && (accept(Token.GREATER) || accept(Token.GREATEREQ) || accept(Token.LESSTHAN) || accept(Token.LESSEQ) || accept(Token.EQUAL))){
 			node.addChild(fac);
 			fac.addChild(ASTType.OP, lookahead(-1));
 			expect(expression(fac), "second expression in condition");
@@ -359,6 +359,7 @@ public class Parser {
 		
 		public void addChild(AbstractSyntaxNode node){
 			children.add(node);
+			node.parent = this;
 		}
 		
 		public AbstractSyntaxNode addChild(ASTType type, Object content) {

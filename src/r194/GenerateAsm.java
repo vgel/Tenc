@@ -3,6 +3,7 @@ package r194;
 import java.util.*;
 
 import r194.Parser.*;
+import r194.Lexer.*;
 
 public class GenerateAsm {
 	static final String functionMangle = "func_%s";
@@ -122,8 +123,11 @@ public class GenerateAsm {
 				return new Expression(node, Factor.regToUse, functions, offsets);
 			} else if (node.type == ASTType.RET){
 				return new Return(node, func, functions, offsets);
-			} else {
-				error("No such statement " + node.type);
+			} else if (node.type == ASTType.IF){
+				return new If(node, func, functions, offsets);
+			} else if (node.type == ASTType.WHILE){
+				return new While(node, func, functions, offsets);
+			} else { error("No such statement " + node.type);
 				return null;
 			}
 		}
@@ -180,6 +184,68 @@ public class GenerateAsm {
 		}
 	}
 	
+	public static class If extends Statement {
+		Condition cond;
+		List<Statement> statements;
+		String blockStart;
+		String blockEnd;
+		
+		public If(AbstractSyntaxNode node, String func, Map<String, Type> functions, Map<String, Integer> offsets) {
+			blockStart = getUniqueLabel("start_if_block");
+			blockEnd = getUniqueLabel("end_if_block");
+			cond = new Condition(node.children.get(0), functions, offsets, "SET PC, " + blockStart);
+			
+			statements = new ArrayList<>();
+			for (AbstractSyntaxNode stat : node.children.get(1).children){
+				statements.add(Statement.getFor(stat, func, functions, offsets));
+			}
+		}
+		
+		@Override
+		public void fillInCode(List<String> assembly) {
+			cond.fillInCode(assembly);
+			assembly.add("SET PC, " + blockEnd);
+			assembly.add(":" + blockStart);
+			for (Statement s : statements){
+				s.fillInCode(assembly);
+			}
+			assembly.add(":" + blockEnd);
+		}
+	}
+	
+	public static class While extends Statement {
+		Condition cond;
+		List<Statement> statements;
+		String condStart;
+		String blockStart;
+		String blockEnd;
+		
+		public While(AbstractSyntaxNode node, String func, Map<String, Type> functions, Map<String, Integer> offsets) {
+			condStart = getUniqueLabel("start_while_cond");
+			blockStart = getUniqueLabel("start_while_block");
+			blockEnd = getUniqueLabel("end_while_block");
+			cond = new Condition(node.children.get(0), functions, offsets, "SET PC, " + blockStart);
+			
+			statements = new ArrayList<>();
+			for (AbstractSyntaxNode stat : node.children.get(1).children){
+				statements.add(Statement.getFor(stat, func, functions, offsets));
+			}
+		}
+		
+		@Override
+		public void fillInCode(List<String> assembly) {
+			assembly.add(":" + condStart);
+			cond.fillInCode(assembly);
+			assembly.add("SET PC, " + blockEnd);
+			assembly.add(":" + blockStart);
+			for (Statement s : statements){
+				s.fillInCode(assembly);
+			}
+			assembly.add("SET PC, " + condStart);
+			assembly.add(":" + blockEnd);
+		}
+	}
+	
 	public static class Condition implements FillIn {
 		List<AbstractSyntaxNode> nodes;
 		Map<String, Type> functions;
@@ -188,49 +254,47 @@ public class GenerateAsm {
 		
 		//a class that takes one instruction to execute if the condition is true. This instruction should generally be a jump :)
 		public Condition(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets, String instruction){
-			
+			nodes = node.children;
+			this.functions = functions;
+			this.offsets = offsets;
+			this.instruction = instruction;
 		}
 		
 		@Override
 		public void fillInCode(List<String> assembly) {
+			System.out.println("Filling in cond code: " + nodes.size());
 			if (nodes.size() == 1){
-				Expression e = new Expression(nodes.get(0), "X", functions, offsets);
-				e.fillInCode(assembly);
-				assembly.add("SET J, 0");
-				assembly.add("IFN X, J");
-				assembly.add(instruction);
+				ConditionTerm term = new ConditionTerm(nodes.get(0), functions, offsets, instruction);
+				term.fillInCode(assembly);
 			}
 			else {
 				boolean first = true;
+				String trueLabel = getUniqueLabel("or-chain-true");
+				String falseLabel = getUniqueLabel("or-chain-false");
 				for (int i = 0; i < nodes.size(); i++){
-					AbstractSyntaxNode node = nodes.get(i);
-					if (node.type == ASTType.OP){
-						if (i == 0 || i == nodes.size() - 1) {
-							error("Unexpected operator!");
-							return;
+					if (nodes.get(i).type == ASTType.OP){
+						if (i == 0 || i == nodes.size() - 1){
+							error("Unexpected &&");
 						}
+						if (!((Lexeme)nodes.get(i).content).matched.equals("||")){
+							error("Unexpected op " + nodes.get(i).content);
+						}
+						
 						if (first){
-							String op = null;
-							if (node.content.equals("+")) op = "ADD";
-							else if (node.content.equals("-")) op = "SUB";
-							else error("Unknown expr op " + node.content);
-							Term a = new Term(nodes.get(i - 1), functions, offsets);
-							Term b = new Term(nodes.get(i + 1), functions, offsets);
+							ConditionFactor a = new ConditionFactor(nodes.get(i - 1), functions, offsets, "SET PC, " + trueLabel);
+							ConditionFactor b = new ConditionFactor(nodes.get(i + 1), functions, offsets, "SET PC, " + trueLabel);
 							a.fillInCode(assembly);
-							assembly.add("SET " + regToUse + ", " + Term.regToUse);
 							b.fillInCode(assembly);
-							assembly.add(op + " " + regToUse + ", " + Term.regToUse);
 							first = false;
 						}
 						else {
-							String op = null;
-							if (node.content.equals("+")) op = "ADD";
-							else if (node.content.equals("-")) op = "SUB";
-							else error("Unknown expr op " + node.content);
-							Term a = new Term(nodes.get(i + 1), functions, offsets);
-							a.fillInCode(assembly);
-							assembly.add(op + " " + regToUse + ", " + Term.regToUse);
+							ConditionFactor c = new ConditionFactor(nodes.get(i + 1), functions, offsets, "SET PC, " + trueLabel);
+							c.fillInCode(assembly);
+							assembly.add("SET PC, " + falseLabel);
 						}
+						assembly.add(":" + trueLabel);
+						assembly.add(instruction);
+						assembly.add(":" + falseLabel);
 					}
 				}
 			}
@@ -243,10 +307,19 @@ public class GenerateAsm {
 		List<AbstractSyntaxNode> nodes;
 		String instruction;
 		
+		public ConditionTerm(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets, String instruction) {
+			nodes = node.children;
+			this.functions = functions;
+			this.offsets = offsets;
+			this.instruction = instruction;
+		}
+		
 		@Override
 		public void fillInCode(List<String> assembly) {
+			System.out.println("term gen: " + nodes.size());
 			if (nodes.size() == 1){
 				ConditionFactor fac = new ConditionFactor(nodes.get(0), functions, offsets, instruction);
+				fac.fillInCode(assembly);
 			}
 			else {
 				boolean first = true;
@@ -256,7 +329,7 @@ public class GenerateAsm {
 						if (i == 0 || i == nodes.size() - 1){
 							error("Unexpected &&");
 						}
-						if (!nodes.get(i).content.equals("&&")){
+						if (!((Lexeme)nodes.get(i).content).matched.equals("&&")){
 							error("Unexpected op " + nodes.get(i).content);
 						}
 						
@@ -270,11 +343,18 @@ public class GenerateAsm {
 							assembly.add(":" + aTrueLabel);
 							b.fillInCode(assembly);
 							assembly.add("SET PC, " + falseLabel);
+							assembly.add(":" + bTrueLabel);
 							first = false;
 						}
 						else {
-							
+							String cTrueLabel = getUniqueLabel("c-true");
+							ConditionFactor c = new ConditionFactor(nodes.get(i + 1), functions, offsets, "SET PC, " + cTrueLabel);
+							c.fillInCode(assembly);
+							assembly.add("SET PC, " + falseLabel);
+							assembly.add(":" + cTrueLabel);
 						}
+						assembly.add(instruction);
+						assembly.add(":" + falseLabel);
 					}
 				}
 			}
@@ -291,7 +371,7 @@ public class GenerateAsm {
 		public ConditionFactor(AbstractSyntaxNode node, Map<String, Type> functions, Map<String, Integer> offsets, String instruction) {
 			e1 = new Expression(node.children.get(0), "J", functions, offsets);
 			e2 = new Expression(node.children.get(2), regToUse, functions, offsets);
-			this.op = (String)node.children.get(1).content;
+			this.op = ((Lexeme)node.children.get(1).content).matched;
 			this.instruction = instruction;
 		}
 
