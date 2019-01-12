@@ -72,7 +72,7 @@ which can be run on any of the many DCPU emulators to see that A is set to the c
 What are the issues?
 --------------------
 
-1. Very ineffecient
+1. Very inefficient
 
 Currently there are many useless register swaps. For example, the Z -> Y -> X swap that is very common could be removed entirely. 
 
@@ -83,7 +83,7 @@ A program is a set of functions. A function consists of a type name, an identifi
 
 A type name is one of the following strings: "int", "void". Any other type name is invalid.
 
-An identifier is any string consisting entireley of alphanumeric characters and underscores not starting with a digit.
+An identifier is any string consisting entirely of alphanumeric characters and underscores not starting with a digit.
 
 An argument list is a set of Type-Identifier pairs seperated with commas, enclosed with parenthesis:
 `(int foo, int bar)`. Only the following types are allowed: "int".
